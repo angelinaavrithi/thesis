@@ -1,0 +1,13 @@
+nltk
+pandas
+ast
+re
+string
+networkx
+numpy
+gensim
+sklearn
+scipy
+spacy
+matplotlib
+pprint
