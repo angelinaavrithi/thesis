@@ -7,7 +7,7 @@ We use texts retrieved from Twitter. Following a multi-lingual approach, we use 
 Both the spanish and the greek dataset have two labels; "hateful" and "neutral". The english dataset has a third "offensive" label, which indicates a sentiment between hate and neutral.
 
 ### Feature selection:
-We classify text according to four feature sets:
+The texts are classified according to four feature sets:
 1. BoW (Bag-of-Words).
 2. Word embeddings.
 3. BoW + Embeddings.
