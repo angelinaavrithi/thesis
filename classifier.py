@@ -299,7 +299,7 @@ import matplotlib.pyplot as plt
 import string
 import pprint
 
-get_ipython().run_line_magic('matplotlib', 'inline')
+# get_ipython().run_line_magic('matplotlib', 'inline')
 
 # In[19]:
 
@@ -347,13 +347,22 @@ for sent_id, sent in enumerate(processed_sentences):
         sentence_representation = nx.adjacency_matrix(sentence_graph)  # sparse matrix
         rep[sent_id] = sentence_representation.toarray()
 
+# static order of sentences
+fixed_sentence_order = sorted(rep.keys())
+
 # In[ ]:
 
 
 # Flatten the sentence representation array
 arr = []
-for outer_list_id, outer_list in enumerate(rep.values()):
-    arr.append([item for inner_list in outer_list for inner_list in outer_list])
+for sent_id in fixed_sentence_order:
+    outer_list = rep[sent_id]
+    # outer_list is an ndarray -- reshape or concatenate it
+    vector = np.concatenate(outer_list)
+    # this is the same
+    vector = np.reshape(vector, [-1])
+    # value = [item for inner_list in outer_list for item in outer_list]
+    arr.append(vector)
 
 # In[ ]:
 
@@ -394,7 +403,7 @@ nx.draw(sentence_graph, with_labels=True, **options)
 # In[ ]:
 
 
-get_ipython().run_line_magic('matplotlib', 'inline')
+# get_ipython().run_line_magic('matplotlib', 'inline')
 plt.spy(sentence_representation)
 plt.title("Sentence Representation Sparsity");
 
@@ -415,7 +424,7 @@ from sklearn.svm import LinearSVC
 
 
 x = bow
-y = df['class'].astype(int)
+y = df['class'].astype(int).values
 
 # In[ ]:
 
