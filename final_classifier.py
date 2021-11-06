@@ -1,4 +1,3 @@
-from IPython import get_ipython
 
 ### TEXT PREPROCESSING
 
@@ -14,27 +13,58 @@ from ast import literal_eval
 import re, string
 import pandas as pd
 
-def data():
-    global language, dataset_path
+###############
+
+# set language to None for interactive runs
+language = "spanish"
+
+###############
+
+def data(language=None):
     
-    keyb = input("Choose language: type English, Spanish or Greek.")
-    if(keyb.casefold() == "english"):
-        language = 'english'
-    elif(keyb.casefold() == "spanish"):
-        language = 'spanish'
-    elif(keyb.casefold() == "greek"):
-        language = 'greek'
-    else:
-        print("Invalid input. Please type English, Spanish or Greek.")
-        data()
+    if language is None:
+        available = ["english", "spanish", "greek"]
+        keyb = input("Choose language: type English, Spanish or Greek.")
+        while language not in available:
+            print("Invalid input -- supported languages are", available)
+            if language is not None:
+                # if not interactive, exit
+                exit(1)
+        language = keyb.strip().lower()
+
+    print("Running with language:", language)
 
     dataset_path = "dataset_"+ language +".txt"
+    return dataset_path
 
-    return language, dataset_path
+dataset_path = data(language)
 
-data()
+
+
+
+print("Loading data")
+# ISSUE 1: pandas fails to read correctly in some cases. E.g.
+# when language is english, we get error:
+# Expected 7 fields in line 150, saw 8
+# when language is spanish:
+# Expected 3 fields in line 3, saw 5
+# this is because the delimiter (e.g., comma in spanish) often appears in the text itself.
+
+# RESOLUTION (naive -- pandas may have some smarter way to resolve such issues):
+# read the file line by line, applying the delimiter on "safe" zones and specifying maxsplit
+# https://docs.python.org/3/library/stdtypes.html#str.split
+# e.g. for a dataset with lines like below:
+# line_content = "ID_NUMBER_1,0,This is text, pretty hateful not gonna lie, you know"
+# we know that there are three elements and the last is text (where there may be commas => muchos problemas): so we can safely split from the left, at most 3-1=2 times.
+# This is done by, e.g.:
+# id, label, text = line_content.split(",", maxsplit=3)
+
+# In spanish, the text is not in the edge, so you'll need to
+# a) first split to get stuff up to the text, and the portion from the text to the end
+# b) then use rsplit (instead of split) to split from the right the portion above
 
 df =  pd.read_csv(dataset_path)
+
 tweets = df["tweet"].tolist()
 
 def preprocess_word(w):
@@ -74,6 +104,8 @@ def preprocessing(x):
 
     return sentences
 
+print("Preprocessing", len(tweets), "tweets")
+# ISSUE 2: some instances are dropped (eg when I run with the greek dataset keeping only the first 100 instances, 96 instances are returned from the func)
 text = preprocessing(tweets)
 
 
@@ -90,6 +122,8 @@ except AssertionError:
     
 final_str = ([" ".join(x) for x in text])
 
+
+print("Building BOW")
 count_vect = CountVectorizer()
 bow = count_vect.fit_transform(final_str).toarray()
 
@@ -103,12 +137,14 @@ from gensim.models import Word2Vec
 from gensim.models import KeyedVectors
 import numpy as np
 
+print("Building word2vec")
 model = Word2Vec(sentences=text, window=5, min_count=1, workers=4)
 model.save("word2vec.model")
 
 embeddings = [model.wv[word] for word in text]
 
 # Calculate the word vector average for every sentence:
+print("Averaging text embeddings")
 v_average = []
 for i in text:
     av = np.mean(model.wv[i], axis=0)
@@ -121,14 +157,15 @@ def flatten_list(x):
 #Takes a nested list and converts it into a list of elements
 #where every sublist is a new element
 
-    new_list = [] 
-    
+    new_list = []
+
     for sent in x:
         sentences = " ".join(sent)
         new_list.append(sentences)
-    
+
     return new_list
 
+print("Flattening text")
 new = flatten_list(text)
 
 import numpy as np
@@ -137,7 +174,6 @@ import matplotlib.pyplot as plt
 import spacy
 import string
 import pprint
-get_ipython().run_line_magic('matplotlib', 'inline')
 
 #Append every word to a wordset
 wordset = set()
@@ -161,6 +197,7 @@ elif language == 'greek':
 
 timestamps1 = []
 
+print("Extracting dependency graphs")
 start_time1 = time.time()
 for sent_id, sent in enumerate(new[:40]):
     sentence_graph = base_graph.copy()
@@ -178,6 +215,7 @@ for i in range(5, len(text)):
 for x,y in zip(index, timestamps1):
     print("Creating graphs: ", x, " sentences in ", y, "seconds")
 
+print("Building syntactic graphs")
 #Add edges between the nodes according to syntactic relations
 start_time2 = time.time()
 timestamps2 = []
@@ -194,13 +232,14 @@ for sent_id, sent in enumerate(processed_sentences[:40]):
 for x,y in zip(index, timestamps2):
     print("Adding edges: ", x, " sentences in ", y, "seconds")
 
+print("Flattening adjacency matrices")
 # Flatten the sentence representation array
 arr = []
 key_order = sorted(rep.keys())
 
 for sent_id in key_order:
     outer_list = rep[sent_id]
-    vector = np.reshape(vector, [-1])
+    vector = np.reshape(outer_list, [-1])
     arr.append(vector)
 
 
@@ -225,6 +264,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
 from sklearn.svm import LinearSVC
 
+print("Classifying BOW - LR")
 x = bow
 y = df['class'].astype(int)
 
@@ -237,6 +277,7 @@ bow_report = classification_report(y_test, bow_predictions)
 print(bow_report)
 
 #### Classification using embeddings:
+print("Classifying embeddings - LR")
 v_train, v_test, y_train, y_test = train_test_split(v_average, y, test_size=0.25, random_state=0)
 logr.fit(v_train, y_train)
 emb_predictions = logr.predict(v_test)
@@ -245,6 +286,7 @@ emb_report = classification_report(y_test, emb_predictions)
 print(emb_report)
 
 #### Classification using both Bag-of-Words and embeddings: 
+print("Classifying BOW + embeddings - LR")
 conc = np.concatenate([bow, v_average], axis=1)
 
 c_train, c_test, y_train, y_test = train_test_split(conc, y, test_size=0.25, random_state=0)
@@ -255,6 +297,7 @@ bow_emb_report = classification_report(y_test, bow_emb_predictions)
 print(bow_emb_report)
 
 #### Classification using syntax
+print("Classifying syntax + LR")
 g_train, g_test, y_train, y_test = train_test_split(arr, y, test_size=0.25, random_state=0)
 logr.fit(g_train, y_train)
 syntax_predictions = logr.predict(g_test)
