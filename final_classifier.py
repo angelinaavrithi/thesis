@@ -10,37 +10,90 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from ast import literal_eval
-import re, string
+import re
+import string
 import pandas as pd
+import numpy as np
 
-###############
+def read_english_file(filename):
+    lst = []
+    with open(filename, encoding="utf8") as file:
+        for line in file:
+            line_content = line.rstrip()
+            line_sep = line_content.split(sep=',', maxsplit=6)
+            lst.append(line_sep)
+
+    return lst
+
+def read_spanish_file(filename):
+    lst = []
+    with open(filename, encoding="utf8") as file:
+        for line in file:
+            line_content = line.rstrip()
+            line_sep = line_content.split(sep=",", maxsplit=1)
+            line_rsep = line_sep[1].rsplit(sep=",", maxsplit=1)
+            line_rsep.append(line_sep[0])
+            lst.append(line_rsep)
+
+    return lst
+
+def read_greek_file(filename):
+    lst = []
+    with open(filename, encoding="utf8") as file:
+        for line in file:
+            line_content = line.rstrip()
+            line_sep = line_content.split(sep=',', maxsplit=2)
+            lst.append(line_sep)
+
+    return lst
+
 
 # set language to None for interactive runs
-language = "spanish"
-
-###############
+language = None
 
 def data(language=None):
     
     if language is None:
         available = ["english", "spanish", "greek"]
         keyb = input("Choose language: type English, Spanish or Greek.")
+        language = keyb.strip().lower()
         while language not in available:
             print("Invalid input -- supported languages are", available)
             if language is not None:
                 # if not interactive, exit
                 exit(1)
-        language = keyb.strip().lower()
+
 
     print("Running with language:", language)
 
-    dataset_path = "dataset_"+ language +".txt"
-    return dataset_path
+    return language
 
-dataset_path = data(language)
+language = data()
+dataset_path = "dataset_"+ language +".txt"
 
+if language == "english":
+    data = read_english_file(dataset_path)
+    #df = pd.DataFrame(data, columns=["id", "count", "hate_speech", "offensive_language", "neither", "class", "tweet"])
+    df = pd.DataFrame(data)
+    df.columns = df.iloc[0]
+    df = df.iloc[1:, :]
+    print(df)
 
+elif language == "spanish":
+    data = read_spanish_file(dataset_path)
+    df = pd.DataFrame(data)
+    df.columns = df.iloc[0]
+    df = df.iloc[1:, :]
+    print(df)
 
+elif language == "greek":
+    data = read_greek_file(dataset_path)
+    df = pd.DataFrame(data)
+    df.columns = df.iloc[0]
+    df = df.iloc[1:, :]
+    print(df)
+
+tweets = df["tweet"].tolist()
 
 print("Loading data")
 # ISSUE 1: pandas fails to read correctly in some cases. E.g.
@@ -63,9 +116,6 @@ print("Loading data")
 # a) first split to get stuff up to the text, and the portion from the text to the end
 # b) then use rsplit (instead of split) to split from the right the portion above
 
-df =  pd.read_csv(dataset_path)
-
-tweets = df["tweet"].tolist()
 
 def preprocess_word(w):
     # Removes punctuation
@@ -79,7 +129,8 @@ def preprocessing(x):
     # Returns a nested list of the processed sentences
     
     # Removes mentions, numbers and links
-    mentions = [re.sub(r'@\w+',"", sent) for sent in tweets]
+    sents = [sent for sent in tweets if sent != None]
+    mentions = [re.sub(r'@\w+',"", sent) for sent in sents]
     numbers = [re.sub('[0-9]+', "", sent) for sent in mentions]
     links = [re.sub(r'http\S+', "", sent) for sent in numbers]
     emoji = [re.sub("[\U0001F600-\U0001F64F]+", "", sent) for sent in links]
@@ -109,7 +160,7 @@ print("Preprocessing", len(tweets), "tweets")
 text = preprocessing(tweets)
 
 
-### BAG OF WORDS 
+# BAG OF WORDS
 
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import CountVectorizer
@@ -130,7 +181,7 @@ bow = count_vect.fit_transform(final_str).toarray()
 vocab = count_vect.get_feature_names()
 
 
-### EMBEDDINGS 
+# EMBEDDINGS
 
 from gensim.test.utils import common_texts
 from gensim.models import Word2Vec
@@ -151,11 +202,11 @@ for i in text:
     v_average.append(av)
 
 
-### SYNTAX
+# SYNTAX
 
 def flatten_list(x):
-#Takes a nested list and converts it into a list of elements
-#where every sublist is a new element
+# Takes a nested list and converts it into a list of elements
+# where every sublist is a new element
 
     new_list = []
 
@@ -175,24 +226,24 @@ import spacy
 import string
 import pprint
 
-#Append every word to a wordset
+# Append every word to a wordset
 wordset = set()
 for sentence in text:
     for word in sentence:
         wordset.add(word)
 
-#Add every word of the dataset as a node
+# Add every word of the dataset as a node
 base_graph = nx.Graph()
 base_graph.add_nodes_from(wordset)
 
 rep = {}
 processed_sentences = []
 
-if language == 'english':
+if dataset_path == 'dataset_english.txt':
     nlp = spacy.load("en_core_web_sm")
-elif language == 'spanish':
+elif dataset_path == 'dataset_spanish.txt':
     nlp = spacy.load("es_core_news_sm")
-elif language == 'greek':
+elif dataset_path == 'dataset_greek.txt':
     nlp = spacy.load("el_core_news_sm")
 
 timestamps1 = []
@@ -216,7 +267,8 @@ for x,y in zip(index, timestamps1):
     print("Creating graphs: ", x, " sentences in ", y, "seconds")
 
 print("Building syntactic graphs")
-#Add edges between the nodes according to syntactic relations
+
+# Add edges between the nodes according to syntactic relations
 start_time2 = time.time()
 timestamps2 = []
 for sent_id, sent in enumerate(processed_sentences[:40]):
@@ -255,9 +307,9 @@ for sent_id in key_order:
 # nx.draw(sentence_graph, with_labels=True, **options)
 
 
-### CLASSIFICATION
+# CLASSIFICATION
 
-#### Classification using Bag-of-Words:
+# Classification using Bag-of-Words:
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -276,7 +328,7 @@ bow_predictions = logr.predict(x_test)
 bow_report = classification_report(y_test, bow_predictions)
 print(bow_report)
 
-#### Classification using embeddings:
+# Classification using embeddings:
 print("Classifying embeddings - LR")
 v_train, v_test, y_train, y_test = train_test_split(v_average, y, test_size=0.25, random_state=0)
 logr.fit(v_train, y_train)
@@ -285,7 +337,7 @@ emb_predictions = logr.predict(v_test)
 emb_report = classification_report(y_test, emb_predictions)
 print(emb_report)
 
-#### Classification using both Bag-of-Words and embeddings: 
+# Classification using both Bag-of-Words and embeddings:
 print("Classifying BOW + embeddings - LR")
 conc = np.concatenate([bow, v_average], axis=1)
 
@@ -296,8 +348,8 @@ bow_emb_predictions = logr.predict(c_test)
 bow_emb_report = classification_report(y_test, bow_emb_predictions)
 print(bow_emb_report)
 
-#### Classification using syntax
-print("Classifying syntax + LR")
+# Classification using syntax
+print("Classifying syntax - LR")
 g_train, g_test, y_train, y_test = train_test_split(arr, y, test_size=0.25, random_state=0)
 logr.fit(g_train, y_train)
 syntax_predictions = logr.predict(g_test)
