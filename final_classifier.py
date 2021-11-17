@@ -239,11 +239,11 @@ base_graph.add_nodes_from(wordset)
 rep = {}
 processed_sentences = []
 
-if dataset_path == 'dataset_english.txt':
+if language == "english":
     nlp = spacy.load("en_core_web_sm")
-elif dataset_path == 'dataset_spanish.txt':
+elif language == "spanish":
     nlp = spacy.load("es_core_news_sm")
-elif dataset_path == 'dataset_greek.txt':
+elif language == "greek":
     nlp = spacy.load("el_core_news_sm")
 
 timestamps1 = []
