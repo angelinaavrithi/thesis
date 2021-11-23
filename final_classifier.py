@@ -1,7 +1,5 @@
 
-### TEXT PREPROCESSING
-
-#!py -3.8 -m pip install -r requirements.txt
+# TEXT PREPROCESSING
 
 import time
 import nltk
@@ -73,49 +71,22 @@ dataset_path = "dataset_"+ language +".txt"
 
 if language == "english":
     data = read_english_file(dataset_path)
-    #df = pd.DataFrame(data, columns=["id", "count", "hate_speech", "offensive_language", "neither", "class", "tweet"])
-    df = pd.DataFrame(data)
-    df.columns = df.iloc[0]
-    df = df.iloc[1:, :]
-    print(df)
-
 elif language == "spanish":
     data = read_spanish_file(dataset_path)
-    df = pd.DataFrame(data)
-    df.columns = df.iloc[0]
-    df = df.iloc[1:, :]
-    print(df)
-
 elif language == "greek":
     data = read_greek_file(dataset_path)
-    df = pd.DataFrame(data)
-    df.columns = df.iloc[0]
-    df = df.iloc[1:, :]
-    print(df)
+
+df = pd.DataFrame(data)
+df.columns = df.iloc[0]
+df = df.iloc[1:, :]
+df = df.dropna()
+df[df.astype(str)['tweet'] != '[]']
+#df = df[df['tweet'].map(lambda d: len(d)) > 0]
+print(df)
 
 tweets = df["tweet"].tolist()
 
 print("Loading data")
-# ISSUE 1: pandas fails to read correctly in some cases. E.g.
-# when language is english, we get error:
-# Expected 7 fields in line 150, saw 8
-# when language is spanish:
-# Expected 3 fields in line 3, saw 5
-# this is because the delimiter (e.g., comma in spanish) often appears in the text itself.
-
-# RESOLUTION (naive -- pandas may have some smarter way to resolve such issues):
-# read the file line by line, applying the delimiter on "safe" zones and specifying maxsplit
-# https://docs.python.org/3/library/stdtypes.html#str.split
-# e.g. for a dataset with lines like below:
-# line_content = "ID_NUMBER_1,0,This is text, pretty hateful not gonna lie, you know"
-# we know that there are three elements and the last is text (where there may be commas => muchos problemas): so we can safely split from the left, at most 3-1=2 times.
-# This is done by, e.g.:
-# id, label, text = line_content.split(",", maxsplit=3)
-
-# In spanish, the text is not in the edge, so you'll need to
-# a) first split to get stuff up to the text, and the portion from the text to the end
-# b) then use rsplit (instead of split) to split from the right the portion above
-
 
 def preprocess_word(w):
     # Removes punctuation
@@ -129,8 +100,7 @@ def preprocessing(x):
     # Returns a nested list of the processed sentences
     
     # Removes mentions, numbers and links
-    sents = [sent for sent in tweets if sent != None]
-    mentions = [re.sub(r'@\w+',"", sent) for sent in sents]
+    mentions = [re.sub(r'@\w+',"", sent) for sent in x]
     numbers = [re.sub('[0-9]+', "", sent) for sent in mentions]
     links = [re.sub(r'http\S+', "", sent) for sent in numbers]
     emoji = [re.sub("[\U0001F600-\U0001F64F]+", "", sent) for sent in links]
@@ -151,14 +121,18 @@ def preprocessing(x):
     
     # Removes empty elements, sentences and retweets
     words = [[word for word in sent if word != '' and word != 'rt' and len(word)>1] for sent in word_tokenized]
-    sentences = [sent for sent in words if sent]
+    sentences = [sent for sent in words]
 
     return sentences
 
 print("Preprocessing", len(tweets), "tweets")
-# ISSUE 2: some instances are dropped (eg when I run with the greek dataset keeping only the first 100 instances, 96 instances are returned from the func)
 text = preprocessing(tweets)
 
+for sent in text:
+    if len(sent)==0:
+        print(sent)
+
+exit()
 
 # BAG OF WORDS
 
