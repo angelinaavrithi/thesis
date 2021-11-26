@@ -128,11 +128,16 @@ def preprocessing(x):
 print("Preprocessing", len(tweets), "tweets")
 text = preprocessing(tweets)
 
-for sent in text:
-    if len(sent)==0:
-        print(sent)
 
-exit()
+#def delety_empty_strings(x):
+#
+#    lst = [sent for sent in x if sent != []]
+#    text = [num for num, sent in zip(y, x) if sent not in lst]
+#
+#    return text
+
+#text = delete_empty_strings(preprocessed)
+
 
 # BAG OF WORDS
 
@@ -152,7 +157,7 @@ print("Building BOW")
 count_vect = CountVectorizer()
 bow = count_vect.fit_transform(final_str).toarray()
 
-vocab = count_vect.get_feature_names()
+vocab = count_vect.get_feature_names_out()
 
 
 # EMBEDDINGS
@@ -268,7 +273,6 @@ for sent_id in key_order:
     vector = np.reshape(outer_list, [-1])
     arr.append(vector)
 
-
 # options = {
 #    "font_size": 20,
 #    "node_size": 30,
@@ -291,9 +295,10 @@ from sklearn.metrics import classification_report
 from sklearn.svm import LinearSVC
 
 print("Classifying BOW - LR")
-x = bow
+
 y = df['class'].astype(int)
 
+x = bow
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=0)
 logr = LogisticRegression()
 logr.fit(x_train, y_train)
@@ -330,7 +335,6 @@ syntax_predictions = logr.predict(g_test)
 
 syntax_report = classification_report(y_test, syntax_predictions)
 print(syntax_report)
-
 
 
 # if laptop dies, use some dimensionality reduction method (eg PCA)
