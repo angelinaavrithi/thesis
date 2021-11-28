@@ -18,7 +18,7 @@ def read_english_file(filename):
     with open(filename, encoding="utf8") as file:
         for line in file:
             line_content = line.rstrip()
-            line_sep = line_content.split(sep=',', maxsplit=6)
+            line_sep = line_content.split(sep=",", maxsplit=6)
             lst.append(line_sep)
 
     return lst
@@ -40,7 +40,7 @@ def read_greek_file(filename):
     with open(filename, encoding="utf8") as file:
         for line in file:
             line_content = line.rstrip()
-            line_sep = line_content.split(sep=',', maxsplit=2)
+            line_sep = line_content.split(sep=",", maxsplit=2)
             lst.append(line_sep)
 
     return lst
