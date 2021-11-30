@@ -46,8 +46,16 @@ def read_greek_file(filename):
     return lst
 
 
-# set language to None for interactive runs
-language = None
+# Configuration
+###################
+
+# language: set to None for interactive runs
+language = 'spanish'
+# limit the vocabulary size, or set to None for unrestricted vocab
+max_vocabulary_size = 50
+# limit the number of data, for testing purposes. set to None for no limiting
+num_limit_data = 40
+#################
 
 def data(language=None):
     
@@ -66,23 +74,36 @@ def data(language=None):
 
     return language
 
-language = data()
+language = data(language)
 dataset_path = "dataset_"+ language +".txt"
 
 if language == "english":
+    # ISSUE: wrong header reading and wrong values in multiple columns
     data = read_english_file(dataset_path)
 elif language == "spanish":
     data = read_spanish_file(dataset_path)
 elif language == "greek":
+    # ISSUE: this does not work correctly, see 'class' column contents, e.g. df['class'].unique()
     data = read_greek_file(dataset_path)
 
+
 df = pd.DataFrame(data)
+
 df.columns = df.iloc[0]
 df = df.iloc[1:, :]
 df = df.dropna()
 df[df.astype(str)['tweet'] != '[]']
 #df = df[df['tweet'].map(lambda d: len(d)) > 0]
 print(df)
+
+if num_limit_data is not None:
+    # use shuffle-splitting to make sure the data limiting keeps
+    # stuff from all classes, so that classifiers don't complain
+    from sklearn.model_selection import StratifiedShuffleSplit
+    splitter = StratifiedShuffleSplit(n_splits=1, test_size=num_limit_data)
+    idx_to_keep = list(splitter.split(df, df['class']))[0][1]
+    df = df.iloc[idx_to_keep]
+    print("Limited the dataset to", len(df), "instances.")
 
 tweets = df["tweet"].tolist()
 
@@ -98,7 +119,7 @@ def preprocess_word(w):
 
 def preprocessing(x):
     # Returns a nested list of the processed sentences
-    
+
     # Removes mentions, numbers and links
     mentions = [re.sub(r'@\w+',"", sent) for sent in x]
     numbers = [re.sub('[0-9]+', "", sent) for sent in mentions]
@@ -109,24 +130,30 @@ def preprocessing(x):
     # Removes stopwords
     stop_words = set(stopwords.words(language))
     filtered_sentence = [w for w in symbols if not w.lower() in stop_words]
-    
+
     # Removes lower text, word tokenization
     lower = [[sent.lower()] for sent in filtered_sentence]
     in_list = [word for sent in lower for word in sent]
     word_tokenized = [word_tokenize(sent) for sent in in_list]
     word_tokenized = [sent for sent in word_tokenized if sent]
-    
+
     for _id, sent in enumerate(word_tokenized):
         word_tokenized[_id] =  [preprocess_word(w) for w in sent]
-    
+
     # Removes empty elements, sentences and retweets
     words = [[word for word in sent if word != '' and word != 'rt' and len(word)>1] for sent in word_tokenized]
     sentences = [sent for sent in words]
-
-    return sentences
+    # mark only non-empty sentences to retain
+    retain_index = [idx for (idx, sent) in enumerate(sentences) if len(sent) > 0]
+    return sentences, retain_index
 
 print("Preprocessing", len(tweets), "tweets")
-text = preprocessing(tweets)
+text, retained_index = preprocessing(tweets)
+
+# apply the retained index collection to the text
+# and the dataframe (to keep track of the corresp. labels)
+text = [text[i] for i in retained_index]
+df = df.iloc[retained_index]
 
 
 #def delety_empty_strings(x):
@@ -154,10 +181,11 @@ final_str = ([" ".join(x) for x in text])
 
 
 print("Building BOW")
-count_vect = CountVectorizer()
+count_vect = CountVectorizer(max_features=max_vocabulary_size)
 bow = count_vect.fit_transform(final_str).toarray()
 
-vocab = count_vect.get_feature_names_out()
+
+vocab = count_vect.get_feature_names()
 
 
 # EMBEDDINGS
@@ -171,15 +199,17 @@ print("Building word2vec")
 model = Word2Vec(sentences=text, window=5, min_count=1, workers=4)
 model.save("word2vec.model")
 
+# this will fail if we pass an empty array to map
 embeddings = [model.wv[word] for word in text]
 
 # Calculate the word vector average for every sentence:
 print("Averaging text embeddings")
-v_average = []
-for i in text:
-    av = np.mean(model.wv[i], axis=0)
-    v_average.append(av)
-
+# v_average = []
+# for i in text:
+#     av = np.mean(model.wv[i], axis=0)
+#     v_average.append(av)
+# use the embeddings collected above
+v_average = [np.mean(emb, axis=0) for emb in embeddings]
 
 # SYNTAX
 
@@ -229,7 +259,7 @@ timestamps1 = []
 
 print("Extracting dependency graphs")
 start_time1 = time.time()
-for sent_id, sent in enumerate(new[:40]):
+for sent_id, sent in enumerate(new):
     sentence_graph = base_graph.copy()
     processed_sentences.append(nlp(sent))
     if sent_id % 5 == 0:
@@ -250,7 +280,7 @@ print("Building syntactic graphs")
 # Add edges between the nodes according to syntactic relations
 start_time2 = time.time()
 timestamps2 = []
-for sent_id, sent in enumerate(processed_sentences[:40]):
+for sent_id, sent in enumerate(processed_sentences):
     for token in sent:
         nodeA = token.text
         nodeB = token.head.text
@@ -259,6 +289,7 @@ for sent_id, sent in enumerate(processed_sentences[:40]):
         rep[sent_id] = sentence_representation.toarray()
     if sent_id % 5 == 0:
         timestamps2.append(time.time() - start_time2)
+        print("Calculated", len(timestamps2) * 5, "steps")
 
 for x,y in zip(index, timestamps2):
     print("Adding edges: ", x, " sentences in ", y, "seconds")
@@ -296,6 +327,7 @@ from sklearn.svm import LinearSVC
 
 print("Classifying BOW - LR")
 
+# ISSUE: fix greek df reader or this will break
 y = df['class'].astype(int)
 
 x = bow
@@ -329,6 +361,18 @@ print(bow_emb_report)
 
 # Classification using syntax
 print("Classifying syntax - LR")
+# ISSUE:  arr is a list of vectors but each vector is not of equal length, which is the problem
+# we have to transform each vector to a fixed length in a way that makes sense
+# iirc, the length depends on the number of words. we can, eg.
+# - add a dummy word/symbol to each text so that each text contains num words = max num words of all sentences
+# - yeet all words from larger texts so that each text contains num words = min num words of all sentences
+# - add & yeet words so that each text has num words = median / round(mean()) num words of all setences
+# - something else you've thought of and/or have discussed with big G
+
+# for a baseline that works, I'll limit to the min 
+min_len = min([len(x) for x in arr])
+arr = [x[:min_len] for x in arr]
+
 g_train, g_test, y_train, y_test = train_test_split(arr, y, test_size=0.25, random_state=0)
 logr.fit(g_train, y_train)
 syntax_predictions = logr.predict(g_test)
