@@ -1,17 +1,31 @@
-
-# TEXT PREPROCESSING
-
 import time
 import nltk
+import re
+import string
+import spacy
+import pprint
+import pandas as pd
+import numpy as np
+import pandas as pd
+import statistics
+import networkx as nx
+import matplotlib.pyplot as plt
 from nltk.stem.porter import *
 from nltk.stem import WordNetLemmatizer 
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from ast import literal_eval
-import re
-import string
-import pandas as pd
-import numpy as np
+from gensim.test.utils import common_texts
+from gensim.models import Word2Vec
+from gensim.models import KeyedVectors
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report
+from sklearn.svm import LinearSVC
+from sklearn.feature_extraction.text import CountVectorizer
+
+
+print("\n-------PREPROCESSING--------\n")
 
 def read_english_file(filename):
     lst = []
@@ -50,11 +64,11 @@ def read_greek_file(filename):
 ###################
 
 # language: set to None for interactive runs
-language = 'spanish'
+language = 'english'
 # limit the vocabulary size, or set to None for unrestricted vocab
-max_vocabulary_size = 50
+max_vocabulary_size = 125
 # limit the number of data, for testing purposes. set to None for no limiting
-num_limit_data = 40
+num_limit_data = 100
 #################
 
 def data(language=None):
@@ -69,7 +83,6 @@ def data(language=None):
                 # if not interactive, exit
                 exit(1)
 
-
     print("Running with language:", language)
 
     return language
@@ -83,17 +96,14 @@ if language == "english":
 elif language == "spanish":
     data = read_spanish_file(dataset_path)
 elif language == "greek":
-    # ISSUE: this does not work correctly, see 'class' column contents, e.g. df['class'].unique()
-    data = read_greek_file(dataset_path)
-
+    dirty_data = read_greek_file(dataset_path)
+    data = [dirty_data[0]] + [line for line in dirty_data[1:] if line[0].startswith("1")]
 
 df = pd.DataFrame(data)
-
 df.columns = df.iloc[0]
 df = df.iloc[1:, :]
 df = df.dropna()
 df[df.astype(str)['tweet'] != '[]']
-#df = df[df['tweet'].map(lambda d: len(d)) > 0]
 print(df)
 
 if num_limit_data is not None:
@@ -155,23 +165,9 @@ text, retained_index = preprocessing(tweets)
 text = [text[i] for i in retained_index]
 df = df.iloc[retained_index]
 
-
-#def delety_empty_strings(x):
-#
-#    lst = [sent for sent in x if sent != []]
-#    text = [num for num, sent in zip(y, x) if sent not in lst]
-#
-#    return text
-
-#text = delete_empty_strings(preprocessed)
-
+print("\n-------REPRESENTATION--------\n")
 
 # BAG OF WORDS
-
-from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import CountVectorizer
-from ast import literal_eval
-
 try: 
     assert(literal_eval(str(text)) == text.copy())
 except AssertionError:
@@ -179,40 +175,25 @@ except AssertionError:
     
 final_str = ([" ".join(x) for x in text])
 
-
 print("Building BOW")
 count_vect = CountVectorizer(max_features=max_vocabulary_size)
 bow = count_vect.fit_transform(final_str).toarray()
-
-
 vocab = count_vect.get_feature_names()
 
 
 # EMBEDDINGS
-
-from gensim.test.utils import common_texts
-from gensim.models import Word2Vec
-from gensim.models import KeyedVectors
-import numpy as np
-
 print("Building word2vec")
 model = Word2Vec(sentences=text, window=5, min_count=1, workers=4)
 model.save("word2vec.model")
 
-# this will fail if we pass an empty array to map
 embeddings = [model.wv[word] for word in text]
 
 # Calculate the word vector average for every sentence:
 print("Averaging text embeddings")
-# v_average = []
-# for i in text:
-#     av = np.mean(model.wv[i], axis=0)
-#     v_average.append(av)
-# use the embeddings collected above
 v_average = [np.mean(emb, axis=0) for emb in embeddings]
 
-# SYNTAX
 
+# SYNTAX
 def flatten_list(x):
 # Takes a nested list and converts it into a list of elements
 # where every sublist is a new element
@@ -227,13 +208,6 @@ def flatten_list(x):
 
 print("Flattening text")
 new = flatten_list(text)
-
-import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
-import spacy
-import string
-import pprint
 
 # Append every word to a wordset
 wordset = set()
@@ -296,38 +270,39 @@ for x,y in zip(index, timestamps2):
 
 print("Flattening adjacency matrices")
 # Flatten the sentence representation array
+
 arr = []
 key_order = sorted(rep.keys())
+mean = round(statistics.mean([len(x) for x in rep.values()]))
 
-for sent_id in key_order:
-    outer_list = rep[sent_id]
-    vector = np.reshape(outer_list, [-1])
-    arr.append(vector)
+for id in key_order:
+    outer_list = rep[id]
+    reshaped_vector = np.reshape(outer_list, [-1])
+    resized_vector = np.resize(reshaped_vector, mean)
+    arr.append(resized_vector)
 
-# options = {
-#    "font_size": 20,
-#    "node_size": 30,
-#    "node_color": "white",
-#    "edgecolors": 'blue',
-#    "linewidths": 1,
-#    "width": 1,
-#
-# plt.figure(3,figsize=(33,33))
-# nx.draw(sentence_graph, with_labels=True, **options)
+#for sp in arr:
+#    x = np.resize(sp, mean)
+ #   print('array resized')
+ #   print(len(x))
 
+options = {
+    "font_size": 20,
+    "node_size": 30,
+    "node_color": "white",
+    "edgecolors": 'blue',
+    "linewidths": 1,
+     "width": 1,
+ }
 
-# CLASSIFICATION
+plt.figure(3,figsize=(33,33))
+nx.draw(sentence_graph, with_labels=True, **options)
+
+print("\n-------CLASSIFICATION-------\n")
 
 # Classification using Bag-of-Words:
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report
-from sklearn.svm import LinearSVC
-
 print("Classifying BOW - LR")
 
-# ISSUE: fix greek df reader or this will break
 y = df['class'].astype(int)
 
 x = bow
@@ -339,6 +314,7 @@ bow_predictions = logr.predict(x_test)
 bow_report = classification_report(y_test, bow_predictions)
 print(bow_report)
 
+
 # Classification using embeddings:
 print("Classifying embeddings - LR")
 v_train, v_test, y_train, y_test = train_test_split(v_average, y, test_size=0.25, random_state=0)
@@ -347,6 +323,7 @@ emb_predictions = logr.predict(v_test)
 
 emb_report = classification_report(y_test, emb_predictions)
 print(emb_report)
+
 
 # Classification using both Bag-of-Words and embeddings:
 print("Classifying BOW + embeddings - LR")
@@ -359,19 +336,9 @@ bow_emb_predictions = logr.predict(c_test)
 bow_emb_report = classification_report(y_test, bow_emb_predictions)
 print(bow_emb_report)
 
+
 # Classification using syntax
 print("Classifying syntax - LR")
-# ISSUE:  arr is a list of vectors but each vector is not of equal length, which is the problem
-# we have to transform each vector to a fixed length in a way that makes sense
-# iirc, the length depends on the number of words. we can, eg.
-# - add a dummy word/symbol to each text so that each text contains num words = max num words of all sentences
-# - yeet all words from larger texts so that each text contains num words = min num words of all sentences
-# - add & yeet words so that each text has num words = median / round(mean()) num words of all setences
-# - something else you've thought of and/or have discussed with big G
-
-# for a baseline that works, I'll limit to the min 
-min_len = min([len(x) for x in arr])
-arr = [x[:min_len] for x in arr]
 
 g_train, g_test, y_train, y_test = train_test_split(arr, y, test_size=0.25, random_state=0)
 logr.fit(g_train, y_train)
