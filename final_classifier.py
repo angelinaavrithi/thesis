@@ -102,7 +102,6 @@ elif language == "greek":
 df = pd.DataFrame(data)
 df.columns = df.iloc[0]
 df = df.iloc[1:, :]
-df = df.drop(labels=['count', 'hate_speech', 'offensive_language', 'neither'], axis='columns')
 df = df.dropna()
 df[df.astype(str)['tweet'] != '[]']
 df = df[df['class'] != '']
