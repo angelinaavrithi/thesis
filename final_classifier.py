@@ -102,9 +102,10 @@ elif language == "greek":
 df = pd.DataFrame(data)
 df.columns = df.iloc[0]
 df = df.iloc[1:, :]
+df = df.drop(labels=['count', 'hate_speech', 'offensive_language', 'neither'], axis='columns')
 df = df.dropna()
 df[df.astype(str)['tweet'] != '[]']
-print(df)
+df = df[df['class'] != '']
 
 if num_limit_data is not None:
     # use shuffle-splitting to make sure the data limiting keeps
@@ -113,11 +114,11 @@ if num_limit_data is not None:
     splitter = StratifiedShuffleSplit(n_splits=1, test_size=num_limit_data)
     idx_to_keep = list(splitter.split(df, df['class']))[0][1]
     df = df.iloc[idx_to_keep]
-    print("Limited the dataset to", len(df), "instances.")
+    print("Limited dataset to", len(df), "instances")
 
 tweets = df["tweet"].tolist()
 
-print("Loading data")
+print("Loading data...")
 
 def preprocess_word(w):
     # Removes punctuation
@@ -171,18 +172,18 @@ print("\n-------REPRESENTATION--------\n")
 try: 
     assert(literal_eval(str(text)) == text.copy())
 except AssertionError:
-    print('failed to convert')
+    print('Failed to convert')
     
 final_str = ([" ".join(x) for x in text])
 
-print("Building BOW")
+print("Building Bag of Words")
 count_vect = CountVectorizer(max_features=max_vocabulary_size)
 bow = count_vect.fit_transform(final_str).toarray()
 vocab = count_vect.get_feature_names()
 
 
 # EMBEDDINGS
-print("Building word2vec")
+print("\nBuilding word2vec")
 model = Word2Vec(sentences=text, window=5, min_count=1, workers=4)
 model.save("word2vec.model")
 
@@ -206,7 +207,7 @@ def flatten_list(x):
 
     return new_list
 
-print("Flattening text")
+print("\nFlattening text")
 new = flatten_list(text)
 
 # Append every word to a wordset
@@ -231,7 +232,7 @@ elif language == "greek":
 
 timestamps1 = []
 
-print("Extracting dependency graphs")
+print("Extracting dependency graphs:")
 start_time1 = time.time()
 for sent_id, sent in enumerate(new):
     sentence_graph = base_graph.copy()
@@ -249,7 +250,7 @@ for i in range(5, len(text)):
 for x,y in zip(index, timestamps1):
     print("Creating graphs: ", x, " sentences in ", y, "seconds")
 
-print("Building syntactic graphs")
+print("\nBuilding syntactic graphs:")
 
 # Add edges between the nodes according to syntactic relations
 start_time2 = time.time()
@@ -268,7 +269,7 @@ for sent_id, sent in enumerate(processed_sentences):
 for x,y in zip(index, timestamps2):
     print("Adding edges: ", x, " sentences in ", y, "seconds")
 
-print("Flattening adjacency matrices")
+print("\nFlattening adjacency matrices")
 # Flatten the sentence representation array
 
 arr = []
