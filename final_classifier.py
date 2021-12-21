@@ -66,9 +66,9 @@ def read_greek_file(filename):
 # language: set to None for interactive runs
 language = 'english'
 # limit the vocabulary size, or set to None for unrestricted vocab
-max_vocabulary_size = 125
+max_vocabulary_size = 512
 # limit the number of data, for testing purposes. set to None for no limiting
-num_limit_data = 100
+num_limit_data = 250
 #################
 
 def data(language=None):
@@ -162,6 +162,7 @@ text, retained_index = preprocessing(tweets)
 
 # apply the retained index collection to the text
 # and the dataframe (to keep track of the corresp. labels)
+print("Fetching retained instances")
 text = [text[i] for i in retained_index]
 df = df.iloc[retained_index]
 
@@ -254,13 +255,15 @@ print("\nBuilding syntactic graphs:")
 # Add edges between the nodes according to syntactic relations
 start_time2 = time.time()
 timestamps2 = []
+
 for sent_id, sent in enumerate(processed_sentences):
     for token in sent:
         nodeA = token.text
         nodeB = token.head.text
         sentence_graph.add_edge(nodeA, nodeB)
         sentence_representation =  nx.adjacency_matrix(sentence_graph) #sparse matrix
-        rep[sent_id] = sentence_representation.toarray()
+        rep[sent_id] = sentence_representation
+        # rep[sent_id] = sentence_representation.toarray()
     if sent_id % 5 == 0:
         timestamps2.append(time.time() - start_time2)
         print("Calculated", len(timestamps2) * 5, "steps")
@@ -273,11 +276,13 @@ print("\nFlattening adjacency matrices")
 
 arr = []
 key_order = sorted(rep.keys())
-mean = round(statistics.mean([len(x) for x in rep.values()]))
+mean = round(statistics.mean([x.shape[0] for x in rep.values()]))
 
 for id in key_order:
     outer_list = rep[id]
-    reshaped_vector = np.reshape(outer_list, [-1])
+    # reshaped_vector = np.reshape(outer_list, [-1])
+    # this is sparse-compatible
+    reshaped_vector = np.reshape(outer_list, (1, -1))
     resized_vector = np.resize(reshaped_vector, mean)
     arr.append(resized_vector)
 
