@@ -68,10 +68,10 @@ language = 'english'
 # limit the vocabulary size, or set to None for unrestricted vocab
 max_vocabulary_size = 512
 # limit the number of data, for testing purposes. set to None for no limiting
-num_limit_data = 250
+num_limit_data = 125
 #################
 
-def data(language=None):
+def get_language(language=None):
     
     if language is None:
         available = ["english", "spanish", "greek"]
@@ -87,11 +87,10 @@ def data(language=None):
 
     return language
 
-language = data(language)
+language = get_language(language)
 dataset_path = "dataset_"+ language +".txt"
 
 if language == "english":
-    # ISSUE: wrong header reading and wrong values in multiple columns
     data = read_english_file(dataset_path)
 elif language == "spanish":
     data = read_spanish_file(dataset_path)
@@ -235,7 +234,6 @@ timestamps1 = []
 print("Extracting dependency graphs:")
 start_time1 = time.time()
 for sent_id, sent in enumerate(new):
-    sentence_graph = base_graph.copy()
     processed_sentences.append(nlp(sent))
     if sent_id % 5 == 0:
         timestamps1.append(time.time() - start_time1)
@@ -257,6 +255,7 @@ start_time2 = time.time()
 timestamps2 = []
 
 for sent_id, sent in enumerate(processed_sentences):
+    sentence_graph = base_graph.copy()
     for token in sent:
         nodeA = token.text
         nodeB = token.head.text
@@ -280,16 +279,10 @@ mean = round(statistics.mean([x.shape[0] for x in rep.values()]))
 
 for id in key_order:
     outer_list = rep[id]
-    # reshaped_vector = np.reshape(outer_list, [-1])
     # this is sparse-compatible
     reshaped_vector = np.reshape(outer_list, (1, -1))
     resized_vector = np.resize(reshaped_vector, mean)
     arr.append(resized_vector)
-
-#for sp in arr:
-#    x = np.resize(sp, mean)
- #   print('array resized')
- #   print(len(x))
 
 options = {
     "font_size": 20,
