@@ -10,12 +10,14 @@ import pandas as pd
 import statistics
 import networkx as nx
 import matplotlib.pyplot as plt
+
 from nltk.stem.porter import *
 from nltk.stem import WordNetLemmatizer 
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from ast import literal_eval
 from gensim.test.utils import common_texts
+
 from gensim.models import Word2Vec
 from gensim.models import KeyedVectors
 from sklearn.model_selection import train_test_split
@@ -66,9 +68,9 @@ def read_greek_file(filename):
 # language: set to None for interactive runs
 language = 'english'
 # limit the vocabulary size, or set to None for unrestricted vocab
-max_vocabulary_size = 512
+max_vocabulary_size = None
 # limit the number of data, for testing purposes. set to None for no limiting
-num_limit_data = 250
+num_limit_data = None
 #################
 
 def data(language=None):
@@ -110,7 +112,7 @@ if num_limit_data is not None:
     # use shuffle-splitting to make sure the data limiting keeps
     # stuff from all classes, so that classifiers don't complain
     from sklearn.model_selection import StratifiedShuffleSplit
-    splitter = StratifiedShuffleSplit(n_splits=1, test_size=num_limit_data)
+    splitter = StratifiedShuffleSplit(n_splits=1, test_size=num_limit_data, random_state=42)
     idx_to_keep = list(splitter.split(df, df['class']))[0][1]
     df = df.iloc[idx_to_keep]
     print("Limited dataset to", len(df), "instances")
@@ -235,7 +237,6 @@ timestamps1 = []
 print("Extracting dependency graphs:")
 start_time1 = time.time()
 for sent_id, sent in enumerate(new):
-    sentence_graph = base_graph.copy()
     processed_sentences.append(nlp(sent))
     if sent_id % 5 == 0:
         timestamps1.append(time.time() - start_time1)
@@ -257,33 +258,42 @@ start_time2 = time.time()
 timestamps2 = []
 
 for sent_id, sent in enumerate(processed_sentences):
+    sentence_graph = base_graph.copy()
     for token in sent:
         nodeA = token.text
         nodeB = token.head.text
         sentence_graph.add_edge(nodeA, nodeB)
-        sentence_representation =  nx.adjacency_matrix(sentence_graph) #sparse matrix
-        rep[sent_id] = sentence_representation
-        # rep[sent_id] = sentence_representation.toarray()
-    if sent_id % 5 == 0:
+
+    sentence_representation =  nx.adjacency_matrix(sentence_graph) #sparse matrix
+    rep[sent_id] = sentence_representation
+    # rep[sent_id] = sentence_representation.toarray()
+    if sent_id % 10 == 0:
         timestamps2.append(time.time() - start_time2)
         print("Calculated", len(timestamps2) * 5, "steps")
 
-for x,y in zip(index, timestamps2):
-    print("Adding edges: ", x, " sentences in ", y, "seconds")
+# for x,y in zip(index, timestamps2):
+#     print("Adding edges: ", x, " sentences in ", y, "seconds")
 
 print("\nFlattening adjacency matrices")
 # Flatten the sentence representation array
 
-arr = []
+# select a fixed vocabulary size as a statistic on document vocabularies
 key_order = sorted(rep.keys())
-mean = round(statistics.mean([x.shape[0] for x in rep.values()]))
+mean = round(statistics.mean([x.shape[1] for x in rep.values()]))
 
+
+arr = []
 for id in key_order:
     outer_list = rep[id]
     # reshaped_vector = np.reshape(outer_list, [-1])
     # this is sparse-compatible
+    # transform to <num nodes> x <num nodes> to 1D (<num nodes>^2 x 1)
     reshaped_vector = np.reshape(outer_list, (1, -1))
-    resized_vector = np.resize(reshaped_vector, mean)
+    # truncate the huge vector into the first <mean> coordinates
+    # this duplicated stuff
+    # resized_vector = np.resize(reshaped_vector, (1, mean))
+    # import ipdb; ipdb.set_trace()
+    resized_vector = reshaped_vector.toarray()[0, :mean]
     arr.append(resized_vector)
 
 #for sp in arr:
@@ -335,6 +345,7 @@ print("Classifying BOW + embeddings - LR")
 conc = np.concatenate([bow, v_average], axis=1)
 
 c_train, c_test, y_train, y_test = train_test_split(conc, y, test_size=0.25, random_state=0)
+logr = LogisticRegression()
 logr.fit(c_train, y_train)
 bow_emb_predictions = logr.predict(c_test)
 
@@ -346,6 +357,8 @@ print(bow_emb_report)
 print("Classifying syntax - LR")
 
 g_train, g_test, y_train, y_test = train_test_split(arr, y, test_size=0.25, random_state=0)
+
+logr = LogisticRegression()
 logr.fit(g_train, y_train)
 syntax_predictions = logr.predict(g_test)
 
