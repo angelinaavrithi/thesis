@@ -10,14 +10,12 @@ import pandas as pd
 import statistics
 import networkx as nx
 import matplotlib.pyplot as plt
-
 from nltk.stem.porter import *
 from nltk.stem import WordNetLemmatizer 
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from ast import literal_eval
 from gensim.test.utils import common_texts
-
 from gensim.models import Word2Vec
 from gensim.models import KeyedVectors
 from sklearn.model_selection import train_test_split
@@ -68,14 +66,12 @@ def read_greek_file(filename):
 # language: set to None for interactive runs
 language = 'english'
 # limit the vocabulary size, or set to None for unrestricted vocab
-max_vocabulary_size = None
+max_vocabulary_size = 125
 # limit the number of data, for testing purposes. set to None for no limiting
-<<<<<<< HEAD
-num_limit_data = 125
-=======
-num_limit_data = None
->>>>>>> 677cdb386d5aacb2a7c6c0d19c5e1108f729832e
+num_limit_data = 100
+
 #################
+
 
 def get_language(language=None):
     
@@ -269,7 +265,6 @@ for sent_id, sent in enumerate(processed_sentences):
 
     sentence_representation =  nx.adjacency_matrix(sentence_graph) #sparse matrix
     rep[sent_id] = sentence_representation
-    # rep[sent_id] = sentence_representation.toarray()
     if sent_id % 10 == 0:
         timestamps2.append(time.time() - start_time2)
         print("Calculated", len(timestamps2) * 5, "steps")
@@ -277,25 +272,31 @@ for sent_id, sent in enumerate(processed_sentences):
 # for x,y in zip(index, timestamps2):
 #     print("Adding edges: ", x, " sentences in ", y, "seconds")
 
-print("\nFlattening adjacency matrices")
 # Flatten the sentence representation array
+print("\nFlattening adjacency matrices")
 
-# select a fixed vocabulary size as a statistic on document vocabularies
+# Select a fixed vocabulary size as a statistic on document vocabularies
 key_order = sorted(rep.keys())
-mean = round(statistics.mean([x.shape[1] for x in rep.values()]))
 
-
-arr = []
+# Reshape - convert every vector to 1D
+reshaped_list = []
 for id in key_order:
     outer_list = rep[id]
-    # this is sparse-compatible
-    # transform to <num nodes> x <num nodes> to 1D (<num nodes>^2 x 1)
     reshaped_vector = np.reshape(outer_list, (1, -1))
-    # truncate the huge vector into the first <mean> coordinates
-    # this duplicated stuff
-    # resized_vector = np.resize(reshaped_vector, (1, mean))
-    # import ipdb; ipdb.set_trace()
-    resized_vector = reshaped_vector.toarray()[0, :mean]
+    reshaped_list.append(reshaped_vector)
+
+# Calculate mean
+mean = round(statistics.mean([vector.shape[1] for vector in reshaped_list]))
+print("MEAN IS ", mean)
+
+# Resize
+# Truncate long vectors
+# Add zeros to short vectors
+arr = []
+for vector in reshaped_list:
+    csr_vector = vector.tocsr()
+    resized_vector = csr_vector[0, :mean]
+    # + ADD DUMMY COLUMNS TO SHORT VECTORS
     arr.append(resized_vector)
 
 options = {
