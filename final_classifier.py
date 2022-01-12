@@ -287,7 +287,8 @@ for id in key_order:
 
 # Calculate mean
 mean = round(statistics.mean([vector.shape[1] for vector in reshaped_list]))
-print("MEAN IS ", mean)
+min = min([vector.shape[1] for vector in reshaped_list])
+#print("MIN IS ", min)
 
 # Resize
 # Truncate long vectors
@@ -295,8 +296,7 @@ print("MEAN IS ", mean)
 arr = []
 for vector in reshaped_list:
     csr_vector = vector.tocsr()
-    resized_vector = csr_vector[0, :mean]
-    # + ADD DUMMY COLUMNS TO SHORT VECTORS
+    resized_vector = csr_vector[0, :min]
     arr.append(resized_vector)
 
 options = {
@@ -306,7 +306,7 @@ options = {
     "edgecolors": 'blue',
     "linewidths": 1,
      "width": 1,
- }
+}
 
 plt.figure(3,figsize=(33,33))
 nx.draw(sentence_graph, with_labels=True, **options)
