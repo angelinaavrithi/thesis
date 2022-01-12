@@ -2,19 +2,19 @@ import time
 import nltk
 import re
 import string
+import scipy.sparse
 import spacy
 import pprint
+import statistics
 import pandas as pd
 import numpy as np
-import pandas as pd
-import statistics
 import networkx as nx
 import matplotlib.pyplot as plt
+from ast import literal_eval
 from nltk.stem.porter import *
 from nltk.stem import WordNetLemmatizer 
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
-from ast import literal_eval
 from gensim.test.utils import common_texts
 from gensim.models import Word2Vec
 from gensim.models import KeyedVectors
@@ -99,6 +99,7 @@ elif language == "spanish":
 elif language == "greek":
     dirty_data = read_greek_file(dataset_path)
     data = [dirty_data[0]] + [line for line in dirty_data[1:] if line[0].startswith("1")]
+del dataset_path
 
 df = pd.DataFrame(data)
 df.columns = df.iloc[0]
@@ -167,6 +168,11 @@ print("Fetching retained instances")
 text = [text[i] for i in retained_index]
 df = df.iloc[retained_index]
 
+del tweets
+del retained_index
+del idx_to_keep
+del splitter
+
 print("\n-------REPRESENTATION--------\n")
 
 # BAG OF WORDS
@@ -181,7 +187,8 @@ print("Building Bag of Words")
 count_vect = CountVectorizer(max_features=max_vocabulary_size)
 bow = count_vect.fit_transform(final_str).toarray()
 vocab = count_vect.get_feature_names()
-
+del final_str
+del count_vect
 
 # EMBEDDINGS
 print("\nBuilding word2vec")
@@ -194,6 +201,8 @@ embeddings = [model.wv[word] for word in text]
 print("Averaging text embeddings")
 v_average = [np.mean(emb, axis=0) for emb in embeddings]
 
+del model
+del embeddings
 
 # SYNTAX
 def flatten_list(x):
@@ -250,6 +259,12 @@ for i in range(5, len(text)):
 for x,y in zip(index, timestamps1):
     print("Creating graphs: ", x, " sentences in ", y, "seconds")
 
+del new
+del nlp
+del index
+del timestamps1
+del start_time1
+
 print("\nBuilding syntactic graphs:")
 
 # Add edges between the nodes according to syntactic relations
@@ -267,10 +282,15 @@ for sent_id, sent in enumerate(processed_sentences):
     rep[sent_id] = sentence_representation
     if sent_id % 10 == 0:
         timestamps2.append(time.time() - start_time2)
-        print("Calculated", len(timestamps2) * 5, "steps")
+        print("Calculated", len(timestamps2) * 5, "out of", 5 * round((len(processed_sentences)/2)/5), "steps")
 
-# for x,y in zip(index, timestamps2):
-#     print("Adding edges: ", x, " sentences in ", y, "seconds")
+del nodeA
+del nodeB
+del sentence_graph
+del sentence_representation
+del timestamps2
+del start_time2
+del base_graph
 
 # Flatten the sentence representation array
 print("\nFlattening adjacency matrices")
@@ -286,35 +306,38 @@ for id in key_order:
     reshaped_list.append(reshaped_vector)
 
 # Calculate mean
-mean = round(statistics.mean([vector.shape[1] for vector in reshaped_list]))
+#mean = round(statistics.mean([vector.shape[1] for vector in reshaped_list]))
 min = min([vector.shape[1] for vector in reshaped_list])
 #print("MIN IS ", min)
 
 # Resize
 # Truncate long vectors
 # Add zeros to short vectors
-arr = []
+resized_list = []
 for vector in reshaped_list:
     csr_vector = vector.tocsr()
     resized_vector = csr_vector[0, :min]
-    arr.append(resized_vector)
+    resized_list.append(resized_vector)
 
-options = {
-    "font_size": 20,
-    "node_size": 30,
-    "node_color": "white",
-    "edgecolors": 'blue',
-    "linewidths": 1,
-     "width": 1,
-}
+arr = scipy.sparse.vstack(resized_list)
+del resized_list
 
-plt.figure(3,figsize=(33,33))
-nx.draw(sentence_graph, with_labels=True, **options)
+#options = {
+#    "font_size": 20,
+#    "node_size": 30,
+#    "node_color": "white",
+#    "edgecolors": 'blue',
+#    "linewidths": 1,
+#     "width": 1,
+#}
+
+#plt.figure(3,figsize=(33,33))
+#nx.draw(sentence_graph, with_labels=True, **options)
 
 print("\n-------CLASSIFICATION-------\n")
 
 # Classification using Bag-of-Words:
-print("Classifying BOW - LR")
+print("Classifying BOW || Logistic Regression")
 
 y = df['class'].astype(int)
 
@@ -329,7 +352,7 @@ print(bow_report)
 
 
 # Classification using embeddings:
-print("Classifying embeddings - LR")
+print("Classifying Embeddings || Logistic Regression")
 v_train, v_test, y_train, y_test = train_test_split(v_average, y, test_size=0.25, random_state=0)
 logr.fit(v_train, y_train)
 emb_predictions = logr.predict(v_test)
@@ -339,7 +362,7 @@ print(emb_report)
 
 
 # Classification using both Bag-of-Words and embeddings:
-print("Classifying BOW + embeddings - LR")
+print("Classifying BOW + Embeddings || Logistic Regression")
 conc = np.concatenate([bow, v_average], axis=1)
 
 c_train, c_test, y_train, y_test = train_test_split(conc, y, test_size=0.25, random_state=0)
@@ -352,12 +375,12 @@ print(bow_emb_report)
 
 
 # Classification using syntax
-print("Classifying syntax - LR")
+print("Classifying Syntax || Logistic Regression")
 
 g_train, g_test, y_train, y_test = train_test_split(arr, y, test_size=0.25, random_state=0)
 
 logr = LogisticRegression()
-logr.fit(g_train, y_train)
+logr.fit(g_train,y_train)
 syntax_predictions = logr.predict(g_test)
 
 syntax_report = classification_report(y_test, syntax_predictions)
