@@ -208,9 +208,9 @@ def classify_and_report(x, y, method_name):
 def main():
     print("\n-------PREPROCESSING--------\n")
     # Configuration
-    language = 'greek'  # Set to None for interactive runs
-    max_vocabulary_size = 125  # Limit the vocabulary size, or set to None for unrestricted vocab
-    num_limit_data = 100  # Limit the number of data, set to None for no limiting
+    language = None  # Set to None for interactive runs
+    max_vocabulary_size = None  # Limit the vocabulary size, or set to None for unrestricted vocab
+    num_limit_data = None  # Limit the number of data, set to None for no limiting
 
     language = get_language(language)
     dataset_path = "dataset_" + language + ".txt"
