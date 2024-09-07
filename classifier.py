@@ -1,500 +1,183 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# ### TEXT PREPROCESSING
-
-# In[1]:
-
-
-import nltk
-from nltk.stem.porter import *
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import sent_tokenize, word_tokenize
-from nltk.corpus import stopwords
-from ast import literal_eval
-import re, string
+import re
+import string
 import pandas as pd
+import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
+import spacy
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import CountVectorizer
+from gensim.models import Word2Vec
+from keras.preprocessing.sequence import pad_sequences
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report
 
-# In[ ]:
+
+### LOAD & PREPROCESS DATA
+
+# Load data
+def load_data(filepath):
+    df = pd.read_csv(filepath)
+    return df['tweet'].tolist(), df['class'].astype(int).values
 
 
-# In[2]:
-
-
-df = pd.read_csv("labeled_data.csv")
-tweets = df['tweet'].tolist()
-
-
-# In[3]:
-
-
+# Text preprocessing functions
 def preprocess_word(w):
-    # Removes punctuation
-
     translator = str.maketrans('', '', string.punctuation)
-    punctuation = w.translate(translator)
-
-    return punctuation
+    return w.translate(translator)
 
 
-# In[4]:
-
-
-def preprocessing(x):
-    # Returns a nested list of the processed sentences
-
-    # Removes mentions, numbers and links
+def preprocessing(tweets):
     mentions = [re.sub(r'@\w+', "", sent) for sent in tweets]
     numbers = [re.sub('[0-9]+', "", sent) for sent in mentions]
     links = [re.sub(r'http\S+', "", sent) for sent in numbers]
-
-    # Removes stopwords
     stop_words = set(stopwords.words('english'))
     filtered_sentence = [w for w in links if not w.lower() in stop_words]
-
-    # Removes lower text, word tokenization
     lower = [[sent.lower()] for sent in filtered_sentence]
     in_list = [word for sent in lower for word in sent]
     word_tokenized = [word_tokenize(sent) for sent in in_list]
     word_tokenized = [sent for sent in word_tokenized if sent]
-
     for _id, sent in enumerate(word_tokenized):
         word_tokenized[_id] = [preprocess_word(w) for w in sent]
-
-    # Removes empty elements, sentences and retweets
     words = [[word for word in sent if word != '' and word != 'rt' and len(word) > 1] for sent in word_tokenized]
-    sentences = [sent for sent in words if sent]
+    return [sent for sent in words if sent]
 
-    return sentences
 
+### TEXT REPRESENTATIONS
 
-# In[5]:
+# Bag-of-Words
+def create_bow(final_str):
+    count_vect = CountVectorizer()
+    bow = count_vect.fit_transform(final_str).toarray()
+    vocab = count_vect.get_feature_names_out()
+    return bow, vocab
 
 
-text = preprocessing(tweets)
-print(text[:50])
+# Embeddings
+def create_embeddings(text):
+    model = Word2Vec(sentences=text, window=5, min_count=1, workers=4)
+    model.save("word2vec.model")
+    embeddings = [model.wv[word] for word in text]
+    v_average = [np.mean(model.wv[sent], axis=0) for sent in text]
+    return model, v_average
 
-# ### BAG OF WORDS
 
-# In[6]:
+# Syntax processing
+def create_dependencies(text):
+    # Pad the sequences
+    padded = pad_sequences(text, padding="post", truncating="post", maxlen=10, dtype=object)
 
+    # Convert padded sequences to strings
+    sequences = [[str(word) for word in sent.tolist()] for sent in padded]
+    sentences = [" ".join(sent) for sent in sequences]
 
-from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import CountVectorizer
-from ast import literal_eval
-
-try:
-    assert (literal_eval(str(text)) == text.copy())
-except AssertionError:
-    print('failed to convert')
-
-final_str = ([" ".join(x) for x in text])
-
-count_vect = CountVectorizer()
-bow = count_vect.fit_transform(final_str).toarray()
-print(bow[:50])
-
-# In[7]:
-
-
-vocab = count_vect.get_feature_names()
-
-# In[8]:
-
-
-# Returns the frequency of every word in total
-# sumindex = [sum(x) for x in zip(*bow)]
-
-
-# ### TF-IDF
-
-# In[9]:
-
-
-# from sklearn.feature_extraction.text import TfidfVectorizer
-
-# tfidf_vect = TfidfVectorizer()
-# tfidf = count_vect.fit_transform(final_str).toarray()
-# print(tfidf[:50])
-
-
-# ### EMBEDDINGS 
-
-# In[10]:
-
-
-from gensim.test.utils import common_texts
-from gensim.models import Word2Vec
-from gensim.models import KeyedVectors
-import numpy as np
-
-model = Word2Vec(sentences=text, window=5, min_count=1, workers=4)
-model.save("word2vec.model")
-
-vector = model.wv['no']  # returns numpy vector of a word
-sims = model.wv.most_similar('no', topn=10)  # returns similar words
-
-embeddings = [model.wv[word] for word in text]
-
-# Calculate the word vector average for every sentence:
-
-# In[11]:
-
-
-v_average = []
-for i in text:
-    av = np.mean(model.wv[i], axis=0)
-    v_average.append(av)
-
-# from sklearn.decomposition import IncrementalPCA
-# from sklearn.manifold import TSNE                 
-# import numpy as np                                  
-# 
-# 
-# def reduce_dimensions(model):
-#     num_dimensions = 2 
-# 
-# 
-#     vectors = np.asarray(model.wv.vectors)
-#     labels = np.asarray(model.wv.index_to_key) 
-# 
-#     tsne = TSNE(n_components=num_dimensions, random_state=0)
-#     vectors = tsne.fit_transform(vectors)
-# 
-#     x_vals = [v[0] for v in vectors]
-#     y_vals = [v[1] for v in vectors]
-#     return x_vals, y_vals, labels
-# 
-# 
-# x_vals, y_vals, labels = reduce_dimensions(model)
-# 
-# def plot_with_plotly(x_vals, y_vals, labels, plot_in_notebook=True):
-#     from plotly.offline import init_notebook_mode, iplot, plot
-#     import plotly.graph_objs as go
-# 
-#     trace = go.Scatter(x=x_vals, y=y_vals, mode='text', text=labels)
-#     data = [trace]
-# 
-#     if plot_in_notebook:
-#         init_notebook_mode(connected=True)
-#         iplot(data, filename='word-embedding-plot')
-#     else:
-#         plot(data, filename='word-embedding-plot.html')
-# 
-# 
-# def plot_with_matplotlib(x_vals, y_vals, labels):
-#     import matplotlib.pyplot as plt
-#     import random
-# 
-#     random.seed(0)
-# 
-#     plt.figure(autosize=True)
-#     plt.scatter(x_vals, y_vals)
-# 
-#     indices = list(range(len(labels)))
-#     selected_indices = random.sample(indices, 25)
-#     for i in selected_indices:
-#         plt.annotate(labels[i], (x_vals[i], y_vals[i]))
-# 
-# try:
-#     get_ipython()
-# except Exception:
-#     plot_function = plot_with_matplotlib
-# else:
-#     plot_function = plot_with_plotly
-# 
-# plot_function(x_vals, y_vals, labels)
-
-# ### SYNTAX
-
-# In[12]:
-
-
-import numpy as np
-import tensorflow as tf
-from keras.preprocessing.sequence import pad_sequences
-from keras.layers import Masking
-
-padded = pad_sequences(text, padding="post", truncating="post", maxlen=10, dtype=object)
-
-
-# In[13]:
-
-
-# print(padded)
-
-
-# In[14]:
-
-
-# print(type(padded))
-# print(type(padded[0]))
-# print(type(padded[0][0]))
-
-
-# In[15]:
-
-
-def to_string(x):
-    sequences = []
-
-    for sent in x:
-        sentences = sent.tolist()
-        sequences.append([str(word) for word in sentences])
-
-    return sequences
-
-
-sequences = to_string(padded)
-print(sequences[:50])
-
-
-# In[16]:
-
-
-def flatten_list(x):
-    # Takes a nested list and converts it into a list of elements
-    # where every sublist is a new element
-
-    new_list = []
-
-    for sent in x:
-        sentences = " ".join(sent)
-        new_list.append(sentences)
-
-    return new_list
-
-
-new = flatten_list(sequences)
-# print(new)
-
-
-# In[17]:
-
-
-import spacy
-
-
-def dependency_parsing(x):
-    # Returns a nested list of syntactic label
-
+    # Dependency parsing
     nlp = spacy.load("en_core_web_sm")
-    dependencies = []
-    for sent in x:
-        doc = nlp(sent)
-        new_list = [token.dep_ for token in doc]
-        dependencies.append(new_list)
+    parsed_dependencies = [[token.dep_ for token in nlp(sent)] for sent in sentences]
 
-    return dependencies
+    return parsed_dependencies
 
 
-dep = dependency_parsing(new)
+def create_graphs(text):
+    wordset = {word for sentence in text for word in sentence}
+    base_graph = nx.Graph()
+    base_graph.add_nodes_from(wordset)
 
-# In[18]:
+    rep = {}
+    processed_sentences = []
+    nlp = spacy.load("en_core_web_sm")
 
+    for sent in text:
+        sentence_graph = base_graph.copy()
+        processed_sentences.append(nlp(sent))
 
-import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
-import string
-import pprint
-
-# get_ipython().run_line_magic('matplotlib', 'inline')
-
-# In[19]:
-
-
-# Append every word to a wordset
-wordset = set()
-for sentence in text:
-    for word in sentence:
-        wordset.add(word)
-
-# In[20]:
-
-
-print(wordset)
-
-# In[22]:
-
-
-# Add every word of the dataset as a node
-base_graph = nx.Graph()
-base_graph.add_nodes_from(wordset)
-# nx.draw(base_graph, with_labels=True)
-
-
-# In[ ]:
-
-
-rep = {}
-processed_sentences = []
-nlp = spacy.load("en_core_web_sm")
-
-for sent_id, sent in enumerate(new):
-    sentence_graph = base_graph.copy()
-    processed_sentences.append(nlp(sent))
-
-# In[ ]:
-
-
-# Add edges between the nodes according to syntactic relations
-for sent_id, sent in enumerate(processed_sentences):
-    for token in sent:
-        nodeA = token.text
-        nodeB = token.head.text
-        sentence_graph.add_edge(nodeA, nodeB)
-        sentence_representation = nx.adjacency_matrix(sentence_graph)  # sparse matrix
+    for sent_id, sent in enumerate(processed_sentences):
+        for token in sent:
+            nodeA = token.text
+            nodeB = token.head.text
+            sentence_graph.add_edge(nodeA, nodeB)
+        sentence_representation = nx.adjacency_matrix(sentence_graph)
         rep[sent_id] = sentence_representation.toarray()
 
-# static order of sentences
-fixed_sentence_order = sorted(rep.keys())
-
-# In[ ]:
-
-
-# Flatten the sentence representation array
-arr = []
-for sent_id in fixed_sentence_order:
-    outer_list = rep[sent_id]
-    # outer_list is an ndarray -- reshape or concatenate it
-    vector = np.concatenate(outer_list)
-    # this is the same
-    vector = np.reshape(vector, [-1])
-    # value = [item for inner_list in outer_list for item in outer_list]
-    arr.append(vector)
-
-# In[ ]:
+    fixed_sentence_order = sorted(rep.keys())
+    arr = [np.reshape(np.concatenate(rep[sent_id]), [-1]) for sent_id in fixed_sentence_order]
+    return arr
 
 
-# [item for inner_list in outer_list for inner_list tin outer_list]
+def plot_graphs(sentence_graph, sentence_representation):
+    options = {
+        "font_size": 20,
+        "node_size": 30,
+        "node_color": "white",
+        "edgecolors": 'blue',
+        "linewidths": 1,
+        "width": 1,
+    }
+    plt.figure(3, figsize=(33, 33))
+    nx.draw(sentence_graph, with_labels=True, **options)
+    plt.spy(sentence_representation)
+    plt.title("Sentence Representation Sparsity")
+    plt.show()
 
 
-# In[ ]:
+# CLASSIFICATION
+
+def classify(x, y):
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=0)
+    logr = LogisticRegression()
+    logr.fit(x_train, y_train)
+    predictions = logr.predict(x_test)
+    report = classification_report(y_test, predictions)
+    return predictions, report
 
 
-# arr = {}
-# for sent_id, outer_list in rep.items():
-#  ...
-#  arr[sent_id] = ....
+def main(filepath):
+    tweets, y = load_data(filepath)
+    text = preprocessing(tweets)
+    final_str = [" ".join(x) for x in text]
+
+    # Bag-of-Words
+    bow, vocab = create_bow(final_str)
+
+    # Embeddings
+    model, v_average = create_embeddings(text)
+
+    # Dependency parsing
+    dep = create_dependencies(text)
+
+    # Create graphs
+    arr = create_graphs(text)
+
+    # Plotting (optional, uncomment if needed)
+    # plot_graphs(sentence_graph, sentence_representation)
+
+    # Classification
+    bow_predictions, bow_report = classify(bow, y)
+    print("Bag-of-Words Predictions:", bow_predictions)
+    print(bow_report)
+
+    v_train, v_test, y_train, y_test = train_test_split(v_average, y, test_size=0.25, random_state=0)
+    logr = LogisticRegression()
+    logr.fit(v_train, y_train)
+    emb_predictions = logr.predict(v_test)
+    emb_report = classification_report(y_test, emb_predictions)
+    print("Embeddings Predictions:", emb_predictions)
+    print(emb_report)
+
+    conc = np.concatenate([bow, v_average], axis=1)
+    bow_emb_predictions, bow_emb_report = classify(conc, y)
+    print("Combined BoW and Embeddings Predictions:", bow_emb_predictions)
+    print(bow_emb_report)
+
+    syntax_predictions, syntax_report = classify(arr, y)
+    print("Syntax Predictions:", syntax_predictions)
+    print(syntax_report)
 
 
-# In[ ]:
-
-
-print('List:     ', type(arr), len(arr))
-print('Sentence: ', type(arr[0]), len(arr[0]))
-print('Item:     ', type(arr[0][0]))
-
-# In[ ]:
-
-
-options = {
-    "font_size": 20,
-    "node_size": 30,
-    "node_color": "white",
-    "edgecolors": 'blue',
-    "linewidths": 1,
-    "width": 1,
-}
-plt.figure(3, figsize=(33, 33))
-nx.draw(sentence_graph, with_labels=True, **options)
-
-# In[ ]:
-
-
-# get_ipython().run_line_magic('matplotlib', 'inline')
-plt.spy(sentence_representation)
-plt.title("Sentence Representation Sparsity");
-
-# ### CLASSIFICATION
-
-# #### Classification using Bag-of-Words:
-
-# In[ ]:
-
-
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report
-from sklearn.svm import LinearSVC
-
-# In[ ]:
-
-
-x = bow
-y = df['class'].astype(int).values
-
-# In[ ]:
-
-
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=0)
-logr = LogisticRegression()
-logr.fit(x_train, y_train)
-bow_predictions = logr.predict(x_test)
-print(bow_predictions)
-
-# In[ ]:
-
-
-bow_report = classification_report(y_test, bow_predictions)
-print(bow_report)
-
-# #### Classification using embeddings:
-
-# In[ ]:
-
-
-v_train, v_test, y_train, y_test = train_test_split(v_average, y, test_size=0.25, random_state=0)
-logr.fit(v_train, y_train)
-emb_predictions = logr.predict(v_test)
-print(emb_predictions)
-
-# In[ ]:
-
-
-emb_report = classification_report(y_test, emb_predictions)
-print(emb_report)
-
-# #### Classification using both Bag-of-Words and embeddings:
-
-# In[ ]:
-
-
-conc = np.concatenate([bow, v_average], axis=1)
-
-# In[ ]:
-
-
-c_train, c_test, y_train, y_test = train_test_split(conc, y, test_size=0.25, random_state=0)
-logr.fit(c_train, y_train)
-bow_emb_predictions = logr.predict(c_test)
-print(bow_emb_predictions)
-
-# In[ ]:
-
-
-bow_emb_report = classification_report(y_test, bow_emb_predictions)
-print(bow_emb_report)
-
-# #### Classification using syntax
-
-# In[ ]:
-
-
-g_train, g_test, y_train, y_test = train_test_split(arr, y, test_size=0.25, random_state=0)
-logr.fit(g_train, y_train)
-syntax_predictions = logr.predict(g_test)
-print(syntax_predictions)
-
-# In[ ]:
-
-
-syntax_report = classification_report(y_test, syntax_predictions)
-print(syntax_report)
-
-# In[ ]:
-
-
-# if laptop dies, use some dimensionality reduction method (eg PCA)
+if __name__ == "__main__":
+    main("labeled_data.csv")
