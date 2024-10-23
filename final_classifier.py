@@ -246,6 +246,12 @@ def main():
     text = [text[i] for i in retained_index]
     df = df.iloc[retained_index]
 
+    # Print preprocessed data for cross-checking
+    preprocessed_text = flatten_list(text)
+    df['preprocessed_tweet'] = preprocessed_text
+    df.to_csv(f"preprocessed_data_{language}.csv", index=False, encoding='utf-8')
+    print(f"\nPreprocessed data exported to preprocessed_data_{language}.csv")
+
     print("\n-------REPRESENTATION--------\n")
 
     # Bag-of-Words representation
@@ -273,6 +279,12 @@ def main():
 
     # Classification using syntax
     classify_and_report(arr, y, "Syntax")
+
+    # Combine all representations
+    print("\nCombining BoW, Embeddings, and Syntax representations")
+    arr_dense = arr.toarray()
+    combined_features = np.concatenate([bow, v_average, arr_dense], axis=1)
+    classify_and_report(combined_features, y, "Combined (BoW + Embeddings + Syntax)")
 
 
 if __name__ == "__main__":
