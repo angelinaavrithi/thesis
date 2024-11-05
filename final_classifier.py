@@ -111,7 +111,6 @@ def preprocessing(x, language):
     words = [[word for word in sent if word != '' and word != 'rt' and len(word) > 1] for sent in word_tokenized]
     sentences = [sent for sent in words]
     retain_index = [idx for (idx, sent) in enumerate(sentences) if len(sent) > 0]
-    [print(sentence) for sentence in sentences]
     return sentences, retain_index
 
 
@@ -194,6 +193,51 @@ def build_syntax_graphs(text, language):
     arr = scipy.sparse.vstack(resized_list)
     return arr
 
+from sklearn.preprocessing import LabelEncoder
+import numpy as np
+import scipy.sparse
+
+def build_syntax_labels(text, language):
+    print("\nFlattening text")
+    new = flatten_list(text) 
+    processed_sentences = []
+
+    if language == "english":
+        nlp = spacy.load("en_core_web_sm")
+    elif language == "spanish":
+        nlp = spacy.load("es_core_news_sm")
+    elif language == "greek":
+        nlp = spacy.load("el_core_news_sm")
+
+    print("\nExtracting dependency labels:")
+    max_len = 0  # track the longest sentence
+
+    for sent_id, sent in enumerate(new):
+        doc = nlp(sent)  
+        sentence_dependencies = [token.dep_ for token in doc]
+        processed_sentences.append(sentence_dependencies)
+        max_len = max(max_len, len(sentence_dependencies))
+
+    # padding
+    padded_sentences = []
+    for sentence in processed_sentences:
+        while len(sentence) < max_len:
+            sentence.append("PAD") 
+        padded_sentences.append(sentence)
+
+    flattened_sentences = [label for sentence in padded_sentences for label in sentence]
+
+    # convert labels into integers
+    le = LabelEncoder()
+    le.fit(flattened_sentences) 
+
+    encoded_sentences = [le.transform(sentence) for sentence in padded_sentences]
+
+    sparse_syntax_matrix = scipy.sparse.csr_matrix(encoded_sentences)
+    print(sparse_syntax_matrix)
+
+    return sparse_syntax_matrix  
+
 
 def classify_and_report(x, y, method_name):
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=0)
@@ -205,10 +249,18 @@ def classify_and_report(x, y, method_name):
     print(report)
 
 
+def print_matrix_info(matrix, name="Matrix"):
+    """Prints the shape and size of a matrix"""
+    print(f"{name} shape: {matrix.shape}")
+    print(f"{name} number of samples (rows): {matrix.shape[0]}")
+    print(f"{name} number of features (columns): {matrix.shape[1]}")
+    print(f"{name} memory usage: {matrix.data.nbytes / 1024**2:.2f} MB")
+
+
 def main():
     print("\n-------PREPROCESSING--------\n")
     # Configuration
-    language = None  # Set to None for interactive runs
+    language = 'english'  # Set to None for interactive runs
     max_vocabulary_size = None  # Limit the vocabulary size, or set to None for unrestricted vocab
     num_limit_data = None  # Limit the number of data, set to None for no limiting
 
@@ -261,7 +313,7 @@ def main():
     v_average = build_embeddings(text)
 
     # Syntax representation
-    arr = build_syntax_graphs(text, language)
+    arr = build_syntax_labels(text, language)
 
     print("\n-------CLASSIFICATION-------\n")
 
